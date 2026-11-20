@@ -1,0 +1,11 @@
+# Generated / downloaded data (rebuildable, or personal price history)
+/data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/

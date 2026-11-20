@@ -1,0 +1,34 @@
+{
+  "title": "WoW Forever Recipe Explorer",
+  "description": "Client DB2 data from wago.tools, normalized. Money values are in copper.",
+  "databases": {
+    "gamedata": {
+      "queries": {
+        "recipes_by_profession": {
+          "title": "Recipes by profession",
+          "sql": "SELECT * FROM v_recipes WHERE complete AND profession LIKE :profession || '%' ORDER BY skill_yellow, name"
+        },
+        "skillup_options": {
+          "title": "Recipes that still give skill-ups at a skill level",
+          "sql": "SELECT * FROM v_recipes WHERE complete AND profession LIKE :profession || '%' AND coalesce(min_skill, 0) <= CAST(:skill AS INTEGER) AND skill_grey > CAST(:skill AS INTEGER) ORDER BY skill_yellow, name"
+        },
+        "what_uses_item": {
+          "title": "What uses this reagent?",
+          "sql": "SELECT * FROM v_reagent_usage WHERE complete AND reagent LIKE '%' || :item || '%' ORDER BY profession, skill_yellow"
+        },
+        "how_to_make_item": {
+          "title": "How is this item made?",
+          "sql": "SELECT * FROM v_recipes WHERE complete AND product LIKE '%' || :item || '%' ORDER BY profession, skill_yellow"
+        }
+      }
+    },
+    "_memory": {
+      "queries": {
+        "recipes_with_latest_prices": {
+          "title": "Recipes with latest AH prices (needs imported prices)",
+          "sql": "SELECT r.spell_id, r.name, r.profession, r.product, r.product_count, lp.market_value AS product_market_value, lp.min_buyout AS product_min_buyout, lp.observed_at FROM gamedata.v_recipes r JOIN prices.latest_prices lp ON lp.item_id = r.product_item_id WHERE r.complete AND lp.realm = :realm ORDER BY r.profession, r.skill_yellow"
+        }
+      }
+    }
+  }
+}
