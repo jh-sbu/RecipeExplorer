@@ -207,6 +207,28 @@ def cmd_serve(args) -> None:
     subprocess.run(cmd, check=False)
 
 
+def cmd_ui(args) -> None:
+    import webbrowser
+
+    from recipe_explorer.ui.server import STATIC_DIR, make_server
+
+    if not config.GAMEDATA_DB.exists():
+        sys.exit(f"{config.GAMEDATA_DB} not found; run `rex build` first")
+    if not (STATIC_DIR / "index.html").exists():
+        print("warning: frontend not built; run `pnpm --dir web install && pnpm --dir web build`")
+    server = make_server(args.host, args.port)
+    url = f"http://{args.host}:{server.server_address[1]}/"
+    print(f"Recipe chains UI at {url}  (Ctrl-C to stop)")
+    if args.open:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
 # --- parser --------------------------------------------------------------------
 
 ALL_HELP = "include recipes referencing items missing from the client (usually SoD/removed content)"
@@ -275,6 +297,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int, default=8001)
     s.add_argument("--open", action="store_true")
     s.set_defaults(func=cmd_serve)
+
+    s = sub.add_parser("ui", help="crafting chain graph in the browser")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=8002)
+    s.add_argument("--open", action="store_true")
+    s.set_defaults(func=cmd_ui)
     return p
 
 

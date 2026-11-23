@@ -25,6 +25,28 @@ uv run rex cost "Bolt of Silk Cloth" --realm MyRealm      # cheapest of AH / ven
 uv run rex profit tailoring --realm MyRealm --max-age-days 3
 ```
 
+### Crafting chain graph
+
+```sh
+pnpm --dir web install && pnpm --dir web build   # once, and after frontend changes (needs Node)
+uv run rex ui --open                              # http://127.0.0.1:8002
+```
+
+Add items to make. The planner lays out everything they need as a left-to-right graph:
+raw materials on the left, targets on the right, with quantities summed when several
+steps share an intermediate. Each node has a dropdown: *Auto* (cheapest), a specific
+recipe, or buy on the AH / from a vendor. Targets are crafted by default.
+
+Each crafting step shows its **value added**: the AH value of its output, minus the value
+of its inputs. Inputs are valued at their AH price, or at their cost (marked `*`, dashed
+edge) if they have none. Across a chain where everything has AH prices, the steps sum to
+(final product on the AH) − (raw materials on the AH), so you can see which step actually
+makes the money. It can be shown as a total, per item, or as a % over inputs.
+
+Plans (targets, choices, node positions) persist in the browser and can be exported and
+imported as JSON. For frontend work, run `pnpm --dir web dev` (hot reload on :5173, with
+`/api` proxied to a running `rex ui`).
+
 When a new client patch lands, run `uv run rex build` again. Raw CSVs are kept per build
 under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
 
@@ -35,7 +57,8 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
                                         manual/*.csv ─────────────┘
  price sources ──adapter──▶ PriceSnapshot ──store──▶ data/prices.sqlite                  (kept forever)
 
- gamedata.sqlite + ATTACH prices.sqlite ──▶ PriceResolver ──▶ CLI / Datasette / future UI
+ gamedata.sqlite + ATTACH prices.sqlite ──▶ PriceResolver ──▶ CLI / Datasette
+                                                   └──▶ build_chain ──▶ rex ui (JSON API) ──▶ web/ (React Flow)
 ```
 
 * **Two databases on purpose.** Game data is disposable and regenerated per build; price
@@ -53,6 +76,11 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
     (e.g. essence conversions) are cut off.
 
   It also computes per-cast profit after the AH cut (default 5%).
+* **`prices/chain.py` turns that into a graph** for the UI: one node per item (one decision
+  each), demand pushed down from the targets, and value added per step. Crafting cycles
+  (e.g. essence conversions) get a separate "bought" copy of the item, so the graph stays acyclic.
+* **The UI server is standard library only** (`ui/server.py`, `http.server`). The frontend in
+  `web/` (Vite, React, React Flow, ELK for layout) builds into `src/recipe_explorer/ui/static/`.
 
 ### Schema (gamedata)
 
