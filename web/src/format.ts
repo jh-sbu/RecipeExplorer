@@ -49,3 +49,13 @@ export const DELTA_MODE_LABEL: Record<DeltaMode, string> = {
   per_unit: "Per item made",
   percent: "% over inputs",
 };
+
+/** ISO time -> "3h ago" / "2d ago". */
+export function ago(iso: string | null): string {
+  if (!iso) return "?";
+  const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (!Number.isFinite(mins)) return "?";
+  if (mins < 60) return `${Math.max(0, Math.round(mins))}m ago`;
+  if (mins < 60 * 48) return `${Math.round(mins / 60)}h ago`;
+  return `${Math.round(mins / 1440)}d ago`;
+}

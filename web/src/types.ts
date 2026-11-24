@@ -86,6 +86,60 @@ export interface Override {
 
 export type DeltaMode = "total" | "per_unit" | "percent";
 
+// Mirrors recipe_explorer.prices.uses (UseReport.to_json). Money is copper.
+export interface UseReagent {
+  item_id: number;
+  name: string;
+  count: number;
+  unit_cost: number | null;
+  method: Method;
+}
+
+export interface Use {
+  spell_id: number;
+  recipe: string;
+  profession: string;
+  consumes: number;
+  product_item_id: number | null;
+  product_name: string | null;
+  product_quality: number | null;
+  product_count: number;
+  reagents: UseReagent[];
+  other_cost: number | null;
+  product_market: number | null;
+  product_listings: number | null;
+  product_observed_at: string | null;
+  product_thin: boolean;
+  product_vendor_sell: number | null;
+  sale: "market" | "vendor" | "use" | "none";
+  product_value: number | null;
+  then: Use | null;
+  value_per_cast: number | null;
+  value_per_unit: number | null;
+}
+
+export interface UseReport {
+  item_id: number;
+  name: string;
+  quality: number | null;
+  depth: number;
+  ah_cut: number;
+  min_listings: number;
+  market: number | null;
+  listings: number | null;
+  observed_at: string | null;
+  thin: boolean;
+  ah_sell: number | null;
+  vendor_sell: number | null;
+  best_sale: number | null;
+  uses: Use[];
+}
+
+export interface UseSettings {
+  depth: number;
+  minListings: number;
+}
+
 export interface Plan {
   version: 1;
   targets: { item_id: number; name: string; quality: number | null; quantity: number }[];
@@ -93,4 +147,5 @@ export interface Plan {
   settings: { realm: string; faction: string; maxAgeDays: number | null; ahCutPct: number };
   positions: Record<string, { x: number; y: number }>; // node id -> position the user dragged it to
   deltaMode: DeltaMode;
+  uses: UseSettings;
 }

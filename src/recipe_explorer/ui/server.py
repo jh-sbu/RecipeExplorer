@@ -6,6 +6,8 @@ threading server needs no locking. Bound to localhost by default.
   GET  /api/meta                  build info, realms with price data
   GET  /api/items?q=silk          item search (craftable items first)
   POST /api/graph                 {targets, overrides, realm, faction, max_age_days, ah_cut}
+  GET  /api/uses?item_id=…        what an item can be made into, ranked by value per unit
+                                  (&realm &faction &max_age_days &ah_cut &depth &min_listings)
   GET  /*                         frontend files from ui/static (built from web/)
 """
 
@@ -22,7 +24,8 @@ from urllib.parse import parse_qs, urlparse
 
 from recipe_explorer import config
 from recipe_explorer.db import open_gamedata
-from recipe_explorer.prices import Override, PriceResolver, build_chain
+from recipe_explorer.prices import Override, PriceResolver, build_chain, find_uses
+from recipe_explorer.prices.uses import MAX_DEPTH
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 MAX_BODY = 1 << 20
@@ -107,16 +110,31 @@ def api_graph(conn: sqlite3.Connection, body: dict) -> dict:
             method, None if recipe is None else _num(recipe, "recipe", cast=int)
         )
 
-    max_age = body.get("max_age_days")
-    ah_cut = _num(body.get("ah_cut", 0.05), "ah_cut", minimum=0)
-    resolver = PriceResolver(
+    resolver = _resolver(conn, body)
+    return build_chain(resolver, targets, overrides).to_json(resolver.ah_cut)
+
+
+def _resolver(conn: sqlite3.Connection, params: dict) -> PriceResolver:
+    """Price settings shared by every endpoint: realm, faction, max_age_days, ah_cut."""
+    max_age = params.get("max_age_days")
+    return PriceResolver(
         conn,
-        realm=body.get("realm") or None,
-        faction=body.get("faction") or "",
+        realm=params.get("realm") or None,
+        faction=params.get("faction") or "",
         max_age=timedelta(days=_num(max_age, "max_age_days", minimum=0)) if max_age else None,
-        ah_cut=ah_cut,
+        ah_cut=_num(params.get("ah_cut", 0.05), "ah_cut", minimum=0),
     )
-    return build_chain(resolver, targets, overrides).to_json(ah_cut)
+
+
+def api_uses(conn: sqlite3.Connection, params: dict) -> dict:
+    item_id = _num(params.get("item_id"), "item_id", cast=int)
+    if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        raise ApiError(f"unknown item id: {item_id}", HTTPStatus.NOT_FOUND)
+    depth = _num(params.get("depth", 2), "depth", cast=int, minimum=1)
+    if depth > MAX_DEPTH:
+        raise ApiError(f"depth must be <= {MAX_DEPTH}")
+    min_listings = _num(params.get("min_listings") or 0, "min_listings", cast=int, minimum=0)
+    return find_uses(_resolver(conn, params), item_id, depth, min_listings).to_json()
 
 
 # --- HTTP -------------------------------------------------------------------------
@@ -163,6 +181,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._api(api_meta)
         if url.path == "/api/items":
             return self._api(lambda c: api_items(c, query.get("q", [""])[0]))
+        if url.path == "/api/uses":
+            return self._api(lambda c: api_uses(c, {k: v[0] for k, v in query.items()}))
         if url.path.startswith("/api/"):
             return self._json(HTTPStatus.NOT_FOUND, {"error": "no such endpoint"})
         self._static(url.path)

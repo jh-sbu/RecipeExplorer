@@ -9,6 +9,7 @@ export type ItemNodeData = {
   override: Override | undefined;
   hasConsumers: boolean;
   onOverride: (itemId: number, o: Override | null) => void;
+  onShowUses: (nodeId: string) => void;
 };
 export type FlowNode = Node<ItemNodeData, "item">;
 
@@ -89,6 +90,13 @@ function ItemNodeImpl({ data, selected }: NodeProps<FlowNode>) {
         )}
         {n.is_target && <span className="target-tag">target</span>}
         {n.overridden && <span className="override-tag" title="You chose how to obtain this">manual</span>}
+        <button
+          className="nodrag uses-btn"
+          title="Most profitable ways to use this item"
+          onClick={(e) => (e.stopPropagation(), data.onShowUses(n.id))}
+        >
+          uses ⇢
+        </button>
       </div>
 
       <div className="prices">

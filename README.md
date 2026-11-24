@@ -23,6 +23,7 @@ With price data:
 uv run rex prices import csv my_prices.csv --realm MyRealm [--faction horde]
 uv run rex cost "Bolt of Silk Cloth" --realm MyRealm      # cheapest of AH / vendor / craft, as a tree
 uv run rex profit tailoring --realm MyRealm --max-age-days 3
+uv run rex uses "Silk Cloth" --value --realm MyRealm      # most profitable things to turn it into
 ```
 
 ### Crafting chain graph
@@ -43,6 +44,31 @@ edge) if they have none. Across a chain where everything has AH prices, the step
 (final product on the AH) − (raw materials on the AH), so you can see which step actually
 makes the money. It can be shown as a total, per item, or as a % over inputs.
 
+### Most profitable use of an item
+
+Select a node and open the **Use** tab in the details panel (or click a node's *uses ⇢*
+button). It answers "what is the most profitable way to use this item?" by ranking every
+recipe that consumes it by **value per unit of the item**:
+
+```
+(product's realized value × products per cast − cost of the other reagents) ÷ units of the item per cast
+```
+
+* The product's **realized value** is the best of selling it on the AH (after the cut),
+  selling it to a vendor, or using it in a further recipe. Following those further uses
+  gives multi-step paths (X → Y → Z). *Steps to follow* sets how deep to look (1–3, default 2).
+* **Other reagents** are valued at what they cost to obtain (cheapest of AH, vendor or
+  craft). The graph's value added values inputs at their AH price instead.
+* The baselines are selling the item as it is, on the AH or to a vendor. Each use shows its gain over the better of the two.
+* **Min listings** ignores AH prices seen with fewer listings than that, so a single
+  overpriced listing can't top the table. Each row shows the product's listing count and age.
+* Recipes that loop back to an item already on the path (essence conversions) are skipped.
+  Recipes that make no item (enchants) are listed separately, without a value.
+
+Expand a row to see the arithmetic for each step. *Plan this* adds the final product as
+a target, sized to use the selected node's quantity, and sets each step to craft with
+that path's recipes, so the graph shows the whole chain.
+
 Plans (targets, choices, node positions) persist in the browser and can be exported and
 imported as JSON. For frontend work, run `pnpm --dir web dev` (hot reload on :5173, with
 `/api` proxied to a running `rex ui`).
@@ -58,7 +84,8 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
  price sources ──adapter──▶ PriceSnapshot ──store──▶ data/prices.sqlite                  (kept forever)
 
  gamedata.sqlite + ATTACH prices.sqlite ──▶ PriceResolver ──▶ CLI / Datasette
-                                                   └──▶ build_chain ──▶ rex ui (JSON API) ──▶ web/ (React Flow)
+                                                   ├──▶ build_chain ──▶ rex ui (JSON API) ──▶ web/ (React Flow)
+                                                   └──▶ find_uses ───┘
 ```
 
 * **Two databases on purpose.** Game data is disposable and regenerated per build; price
@@ -79,6 +106,8 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
 * **`prices/chain.py` turns that into a graph** for the UI: one node per item (one decision
   each), demand pushed down from the targets, and value added per step. Crafting cycles
   (e.g. essence conversions) get a separate "bought" copy of the item, so the graph stays acyclic.
+* **`prices/uses.py` goes the other way:** from an item to what it can become. It is a
+  depth-limited search over `recipe_reagents`, memoized per (item, depth, path).
 * **The UI server is standard library only** (`ui/server.py`, `http.server`). The frontend in
   `web/` (Vite, React, React Flow, ELK for layout) builds into `src/recipe_explorer/ui/static/`.
 
@@ -93,6 +122,14 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
 | `items` | names, quality, levels, vendor buy/sell prices, `in_client` flag |
 | `vendor_items`, `recipe_sources` | hand-maintained, from `manual/*.csv` |
 | `v_recipes`, `v_reagent_usage` | readable views used by the CLI and Datasette |
+
+## Planned
+
+* **Profession filter for uses.** The Use tab and `rex uses --value` currently rank uses
+  across every profession, including ones you don't have. The plan is a "my professions"
+  setting (optionally with skill levels) that limits uses, and the steps they continue
+  into, to recipes you can actually craft. It belongs in `prices/uses.py` (filter in
+  `_Finder.consumers`) and is passed through `/api/uses` like the other settings.
 
 ## Things the client data does *not* tell you
 

@@ -19,6 +19,13 @@ from datetime import UTC, datetime, timedelta
 METHODS = ("market", "vendor", "craft")
 
 
+@dataclass(frozen=True)
+class MarketSnapshot:
+    price: int  # copper per unit
+    quantity: int | None  # listings seen, if the source reports it
+    observed_at: str
+
+
 @dataclass
 class Quote:
     item_id: int
@@ -89,10 +96,15 @@ class PriceResolver:
     # --- single-method lookups ------------------------------------------------
 
     def market_price(self, item_id: int) -> int | None:
+        snap = self.market_snapshot(item_id)
+        return snap.price if snap else None
+
+    def market_snapshot(self, item_id: int) -> MarketSnapshot | None:
+        """The AH observation market_price uses, with its listing count and time."""
         if self.realm is None:
             return None
         sql = """
-            SELECT coalesce(market_value, min_buyout) AS price
+            SELECT coalesce(market_value, min_buyout) AS price, quantity, observed_at
               FROM prices.price_snapshots
              WHERE item_id = ? AND realm = ? AND faction IN (?, '')
                AND coalesce(market_value, min_buyout) IS NOT NULL
@@ -105,7 +117,7 @@ class PriceResolver:
         sql += " ORDER BY (faction = ?) DESC, observed_at DESC LIMIT 1"
         params.append(self.faction)
         row = self.conn.execute(sql, params).fetchone()
-        return row[0] if row else None
+        return MarketSnapshot(row[0], row[1], row[2]) if row else None
 
     def vendor_price(self, item_id: int) -> int | None:
         row = self.conn.execute(

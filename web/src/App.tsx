@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getGraph, getMeta } from "./api";
-import { Details } from "./Details";
+import { Details, type DetailsTab } from "./Details";
 import { money, qty } from "./format";
 import { deltaTone, ItemNode, type FlowNode } from "./ItemNode";
 import { layout } from "./layout";
@@ -32,6 +32,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detailsTab, setDetailsTab] = useState<DetailsTab>("obtain");
   const [autoPos, setAutoPos] = useState<Record<string, XY>>({});
   const [layoutNonce, setLayoutNonce] = useState(0);
   const rf = useReactFlow<FlowNode>();
@@ -90,6 +91,11 @@ export function App() {
     [setPlan],
   );
 
+  const onShowUses = useCallback((nodeId: string) => {
+    setSelectedId(nodeId);
+    setDetailsTab("use");
+  }, []);
+
   const flowNodes = useMemo<FlowNode[]>(() => {
     if (!graph) return [];
     const consumers = new Set(graph.edges.map((e) => e.source));
@@ -108,10 +114,11 @@ export function App() {
           override: n.cycle_copy ? undefined : plan.overrides[n.item_id],
           hasConsumers: consumers.has(n.id),
           onOverride,
+          onShowUses,
         },
       };
     });
-  }, [graph, autoPos, plan.positions, plan.overrides, plan.deltaMode, selectedId, onOverride]);
+  }, [graph, autoPos, plan.positions, plan.overrides, plan.deltaMode, selectedId, onOverride, onShowUses]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   // Carry `measured` over: React Flow drops a node's handle positions when it's missing, and
@@ -194,7 +201,17 @@ export function App() {
         {error && <div className="banner error">{error}</div>}
         {loading && <div className="banner loading">updating…</div>}
       </main>
-      {selected && graph && <Details node={selected} graph={graph} onClose={() => setSelectedId(null)} />}
+      {selected && graph && (
+        <Details
+          node={selected}
+          graph={graph}
+          plan={plan}
+          setPlan={setPlan}
+          tab={detailsTab}
+          onTab={setDetailsTab}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </div>
   );
 }

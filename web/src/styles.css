@@ -50,7 +50,7 @@ code { font-size: 12px; background: var(--surface-2); padding: 1px 4px; border-r
   background: var(--surface-1);
   border-right: 1px solid var(--border);
 }
-.details { width: 320px; border-right: 0; border-left: 1px solid var(--border); }
+.details { width: 360px; border-right: 0; border-left: 1px solid var(--border); }
 .sidebar h1 { font-size: 16px; margin: 0 0 2px; }
 .sidebar section { margin-top: 18px; }
 h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 0 0 8px; }
@@ -119,6 +119,31 @@ button.icon { padding: 0 7px; line-height: 22px; font-size: 16px; background: no
 .details tr.chosen td:first-child::before { content: "● "; color: var(--accent); }
 .details tr.total td { font-weight: 600; border-bottom: 0; }
 .plain { list-style: none; padding: 0; margin: 0; }
+.details .tabs { margin: 10px 0 4px; }
+
+/* Use tab */
+.uses .two { margin-top: 10px; align-items: end; }
+.uses label { margin-bottom: 0; }
+.use-row { cursor: pointer; }
+.use-row:hover td { background: var(--surface-2); }
+.use-row.unvalued { opacity: 0.55; }
+.disclose { background: none; border: 0; padding: 0 4px 0 0; color: var(--text-muted); font-size: 11px; }
+.gain { font-size: 11px; }
+.gain.pos { color: var(--delta-pos); }
+.gain.neg { color: var(--delta-neg); }
+.gain.zero { color: var(--text-muted); }
+.thin { color: var(--delta-neg); }
+.details tr.breakdown > td { padding: 6px 0 10px 12px; }
+.step { margin-bottom: 8px; padding-left: 8px; border-left: 2px solid var(--border); }
+.step table td { font-size: 12px; }
+.no-item { margin-top: 10px; }
+.no-item summary { cursor: pointer; }
+
+.uses-btn {
+  margin-left: auto; font-size: 11px; padding: 0 6px; line-height: 18px;
+  background: none; color: var(--text-secondary);
+}
+.uses-btn:hover { color: var(--text-primary); }
 .note { color: var(--text-muted); font-size: 12px; font-style: italic; margin-top: 6px; }
 
 /* --- canvas overlays ------------------------------------------------------- */

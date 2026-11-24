@@ -12,7 +12,7 @@ from pathlib import Path
 
 from recipe_explorer import config
 from recipe_explorer.db import open_gamedata, open_prices
-from recipe_explorer.prices import CraftCost, PriceResolver, Quote, store_snapshots
+from recipe_explorer.prices import CraftCost, PriceResolver, Quote, find_uses, store_snapshots
 from recipe_explorer.prices.adapters import ADAPTERS
 
 
@@ -139,6 +139,8 @@ def cmd_recipes(args) -> None:
 def cmd_uses(args) -> None:
     conn = open_gamedata()
     item_id = resolve_item(conn, args.item)
+    if args.value:
+        return _print_uses_by_value(conn, item_id, args)
     rows = conn.execute(
         "SELECT * FROM v_reagent_usage WHERE reagent_id = ? AND (complete OR ?) ORDER BY profession, skill_yellow",
         (item_id, args.all),
@@ -147,6 +149,24 @@ def cmd_uses(args) -> None:
         print("Not used in any recipe.")
     for r in rows:
         print(f"{r['spell_id']:>6}  {r['profession'][:12]:12} {r['skill_yellow'] or '-':>4}  {r['count']}x  {r['recipe']}")
+
+
+def _print_uses_by_value(conn, item_id: int, args) -> None:
+    report = find_uses(_make_resolver(conn, args), item_id, args.depth, args.min_listings)
+    thin = " (too few listings)" if report.thin else ""
+    print(f"{report.name}, per unit: sell on AH {fmt_money(report.ah_sell)} after cut{thin}, "
+          f"vendor {fmt_money(report.vendor_sell)}")
+    uses = report.uses if args.all_uses else [u for u in report.uses if u.product_item_id is not None]
+    if not uses:
+        print("Not used in any recipe that makes an item." if report.uses else "Not used in any recipe.")
+    for u in uses:
+        steps = u.steps
+        path = " -> ".join(s.product_name or "(no item)" for s in steps)
+        if steps[-1].sale in ("market", "vendor"):
+            path += f" ({'AH' if steps[-1].sale == 'market' else 'vendor'})"
+        print(f"{fmt_money(u.value_per_unit):>14}/ea  {u.recipe} [{u.profession}, uses {_fmt_qty(u.consumes)}]: {path}")
+    if hidden := len(report.uses) - len(uses):
+        print(f"  ...and {hidden} recipe(s) that make no item, e.g. enchants (--all-uses to list)")
 
 
 def _print_quote(q: Quote, depth: int = 0) -> None:
@@ -262,15 +282,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--all", action="store_true", help=ALL_HELP)
     s.set_defaults(func=cmd_recipes)
 
-    s = sub.add_parser("uses", help="recipes that use an item as a reagent")
-    s.add_argument("item", help="item ID or name")
-    s.add_argument("--all", action="store_true", help=ALL_HELP)
-    s.set_defaults(func=cmd_uses)
-
     def price_opts(sp):
         sp.add_argument("--realm", help="realm for AH prices (omit to ignore AH data)")
         sp.add_argument("--faction", default="", choices=["", "alliance", "horde"])
         sp.add_argument("--max-age-days", type=float, help="ignore AH data older than this")
+
+    s = sub.add_parser("uses", help="recipes that use an item as a reagent")
+    s.add_argument("item", help="item ID or name")
+    s.add_argument("--all", action="store_true", help=ALL_HELP)
+    s.add_argument("--value", action="store_true",
+                   help="rank uses by what they make one unit of the item worth (needs prices)")
+    s.add_argument("--depth", type=int, default=2, choices=[1, 2, 3], help="with --value: steps to follow (default 2)")
+    s.add_argument("--min-listings", type=int, default=0,
+                   help="with --value: ignore AH prices seen with fewer listings than this")
+    s.add_argument("--all-uses", action="store_true", help="with --value: also list recipes that make no item")
+    price_opts(s)
+    s.set_defaults(func=cmd_uses)
 
     s = sub.add_parser("cost", help="cheapest way to obtain an item (AH / vendor / craft)")
     s.add_argument("item", help="item ID or name")

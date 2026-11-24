@@ -1,12 +1,22 @@
 import { METHOD_LABEL, money, QUALITY_COLOR, qty } from "./format";
-import type { ChainNode, Graph } from "./types";
+import type { ChainNode, Graph, Plan } from "./types";
+import { UsesPanel } from "./Uses";
 
-/** Breakdown for the selected node: every price option, recipes, and the value-added sum. */
-export function Details({ node, graph, onClose }: { node: ChainNode; graph: Graph; onClose: () => void }) {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const inputs = graph.edges.filter((e) => e.target === node.id);
-  const consumers = graph.edges.filter((e) => e.source === node.id);
+export type DetailsTab = "obtain" | "use";
 
+/**
+ * The selected node. "Obtain": every price option, recipes, and the value-added sum.
+ * "Use": what the item can be made into, ranked by value per unit.
+ */
+export function Details({ node, graph, plan, setPlan, tab, onTab, onClose }: {
+  node: ChainNode;
+  graph: Graph;
+  plan: Plan;
+  setPlan: (fn: (p: Plan) => Plan) => void;
+  tab: DetailsTab;
+  onTab: (t: DetailsTab) => void;
+  onClose: () => void;
+}) {
   return (
     <aside className="details">
       <header>
@@ -18,6 +28,26 @@ export function Details({ node, graph, onClose }: { node: ChainNode; graph: Grap
       <div className="muted small">
         item {node.item_id} · ×{qty(node.quantity)} · {METHOD_LABEL[node.method]}
       </div>
+
+      <div className="segmented tabs" role="tablist">
+        {(["obtain", "use"] as const).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => onTab(t)}>
+            {t === "obtain" ? "Obtain" : "Use"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "use" ? <UsesPanel node={node} plan={plan} setPlan={setPlan} /> : <ObtainPanel node={node} graph={graph} />}
+    </aside>
+  );
+}
+
+function ObtainPanel({ node, graph }: { node: ChainNode; graph: Graph }) {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const inputs = graph.edges.filter((e) => e.target === node.id);
+  const consumers = graph.edges.filter((e) => e.source === node.id);
+  return (
+    <>
 
       <h3>Ways to obtain (per item)</h3>
       <table>
@@ -96,6 +126,6 @@ export function Details({ node, graph, onClose }: { node: ChainNode; graph: Grap
         </>
       )}
       {node.note && <p className="note">{node.note}</p>}
-    </aside>
+    </>
   );
 }
