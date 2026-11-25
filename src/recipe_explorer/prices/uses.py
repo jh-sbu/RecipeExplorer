@@ -23,10 +23,15 @@ X itself on the AH or to a vendor.
 * **Cycles:** recipes whose product is already on the path (essence up/down conversions)
   are skipped.
 * **Recipes without an item product** (enchants) are listed, but can't be valued.
+* **Professions:** with `professions` (profession ids), only recipes of those professions are
+  considered, at every step. Other reagents are still costed as usual, which may include
+  crafting them with a profession you don't have. There is no skill filter: the client data
+  doesn't hold learn ranks (`min_skill` is 1 for nearly every recipe).
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 
 from recipe_explorer.prices.resolver import MarketSnapshot, PriceResolver
@@ -96,6 +101,9 @@ class UseReport:
     ah_sell: int | None  # per unit after the cut; None if no price or too thin
     vendor_sell: int | None
     uses: list[Use]
+    # The profession filter, if any, and how many recipes that use the item directly it left out.
+    professions: list[int] | None = None
+    hidden: int = 0
 
     @property
     def best_sale(self) -> int | None:
@@ -113,10 +121,13 @@ def _rank(u: Use) -> tuple:
 
 
 class _Finder:
-    def __init__(self, resolver: PriceResolver, min_listings: int) -> None:
+    def __init__(
+        self, resolver: PriceResolver, min_listings: int, professions: Iterable[int] | None = None
+    ) -> None:
         self.r = resolver
         self.conn = resolver.conn
         self.min_listings = min_listings
+        self.professions = frozenset(professions) if professions else None
         self._items: dict[int, tuple[str, int | None, int | None]] = {}
         self._snap: dict[int, MarketSnapshot | None] = {}
         self._cost: dict[int, tuple[int | None, str]] = {}
@@ -151,11 +162,12 @@ class _Finder:
             self._cost[item_id] = (q.unit_cost, q.method)
         return self._cost[item_id]
 
-    def consumers(self, item_id: int) -> list:
-        return self.conn.execute(
+    def consumers(self, item_id: int, filtered: bool = True) -> list:
+        """Complete recipes that use `item_id`; with `filtered`, only your professions' ones."""
+        rows = self.conn.execute(
             """
-            SELECT r.spell_id, r.name, p.name AS profession, r.product_item_id,
-                   coalesce(r.product_count, 1) AS product_count, rr.count AS consumes
+            SELECT r.spell_id, r.name, p.name AS profession, r.profession_id,
+                   r.product_item_id, coalesce(r.product_count, 1) AS product_count, rr.count AS consumes
               FROM recipe_reagents rr
               JOIN recipes r ON r.spell_id = rr.spell_id
               JOIN professions p ON p.id = r.profession_id
@@ -164,6 +176,9 @@ class _Finder:
             """,
             (item_id,),
         ).fetchall()
+        if not filtered or self.professions is None:
+            return rows
+        return [r for r in rows if r["profession_id"] in self.professions]
 
     def other_reagents(self, spell_id: int, used_item: int) -> list:
         return self.conn.execute(
@@ -237,11 +252,24 @@ class _Finder:
             use.value_per_unit = round(use.value_per_cast / use.consumes)
 
 
-def find_uses(resolver: PriceResolver, item_id: int, depth: int = 2, min_listings: int = 0) -> UseReport:
-    """Rank the recipes that consume `item_id` by what they make one unit of it worth."""
+def find_uses(
+    resolver: PriceResolver,
+    item_id: int,
+    depth: int = 2,
+    min_listings: int = 0,
+    professions: Iterable[int] | None = None,
+) -> UseReport:
+    """Rank the recipes that consume `item_id` by what they make one unit of it worth.
+
+    `professions` (profession ids) limits uses, at every step, to those professions. None or
+    empty means every profession.
+    """
     if not 1 <= depth <= MAX_DEPTH:
         raise ValueError(f"depth must be between 1 and {MAX_DEPTH}")
-    f = _Finder(resolver, min_listings)
+    f = _Finder(resolver, min_listings, professions)
+    hidden = 0
+    if f.professions is not None:
+        hidden = len(f.consumers(item_id, filtered=False)) - len(f.consumers(item_id))
     name, quality, vendor_sell = f.item(item_id)
     snap = f.snapshot(item_id)
     return UseReport(
@@ -258,4 +286,6 @@ def find_uses(resolver: PriceResolver, item_id: int, depth: int = 2, min_listing
         ah_sell=f.ah_sell(item_id),
         vendor_sell=vendor_sell,
         uses=f.uses(item_id, depth, frozenset({item_id})),
+        professions=sorted(f.professions) if f.professions is not None else None,
+        hidden=hidden,
     )

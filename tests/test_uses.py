@@ -1,11 +1,12 @@
 import json
+import sqlite3
 
 import pytest
 from conftest import BOLT, BOLT_SPELL, ENCHANT, ESS_UP, GREATER_ESS, LESSER_ESS, LINEN, SHIRT, SHIRT_SPELL, THREAD
 from test_prices import NOW, REALM, add
 
 from recipe_explorer.prices import PriceResolver, PriceSnapshot, find_uses, store_snapshots
-from recipe_explorer.ui.server import ApiError, api_uses
+from recipe_explorer.ui.server import ApiError, api_meta, api_uses
 
 # Vendor sell prices in the fixture are BuyPrice // 4: linen 13, bolt 25, shirt 75. Essences 0.
 
@@ -86,3 +87,71 @@ def test_api_uses(conn, prices_conn):
         api_uses(conn, {"item_id": str(LINEN), "depth": "4"})
     with pytest.raises(ApiError, match="item_id"):
         api_uses(conn, {})
+
+
+TAILORING, ENCHANTING = 197, 333
+
+
+def test_professions_filter_uses_and_later_steps(conn, prices_conn):
+    add(prices_conn, LINEN, 50)
+    add(prices_conn, BOLT, 130)
+    add(prices_conn, SHIRT, 1000)
+    add(prices_conn, LESSER_ESS, 100)
+    resolver = PriceResolver(conn, realm=REALM)
+    # Without Tailoring, linen has no use left.
+    r = find_uses(resolver, LINEN, professions={ENCHANTING})
+    assert (r.uses, r.hidden, r.professions) == ([], 1, [ENCHANTING])
+    # With it, the two-step use through the shirt is found, as without a filter.
+    r = find_uses(resolver, LINEN, professions=[TAILORING, ENCHANTING])
+    [u] = r.uses
+    assert (u.sale, u.value_per_unit, r.hidden) == ("use", 235, 0)
+    # An empty filter means every profession.
+    r = find_uses(resolver, LINEN, professions=[])
+    assert (len(r.uses), r.hidden, r.professions) == (1, 0, None)
+
+
+def test_professions_filter_applies_to_later_steps(paths, conn, prices_conn):
+    # Make the shirt (step 2) a Mining recipe, so a tailor-only filter stops after the bolt.
+    with sqlite3.connect(paths["gamedata"]) as w:
+        w.execute("UPDATE recipes SET profession_id = 186 WHERE spell_id = ?", (SHIRT_SPELL,))
+    add(prices_conn, LINEN, 50)
+    add(prices_conn, BOLT, 130)
+    add(prices_conn, SHIRT, 1000)
+    resolver = PriceResolver(conn, realm=REALM)
+    [u] = find_uses(resolver, LINEN, professions={TAILORING}).uses
+    assert (u.sale, u.value_per_unit, u.then) == ("market", 62, None)
+    [u] = find_uses(resolver, LINEN, professions={TAILORING, 186}).uses
+    assert (u.sale, u.value_per_unit) == ("use", 235)
+
+
+def test_api_uses_professions(conn, prices_conn):
+    add(prices_conn, LINEN, 50)
+    add(prices_conn, BOLT, 130)
+    base = {"item_id": str(LINEN), "realm": REALM, "depth": "1"}
+    out = json.loads(json.dumps(api_uses(conn, {**base, "professions": f"{TAILORING}, {ENCHANTING}"})))
+    assert out["professions"] == [TAILORING, ENCHANTING]
+    assert (len(out["uses"]), out["hidden"]) == (1, 0)
+    out = api_uses(conn, {**base, "professions": str(ENCHANTING)})
+    assert (out["uses"], out["hidden"]) == ([], 1)
+    assert api_uses(conn, {**base, "professions": ""})["professions"] is None
+    with pytest.raises(ApiError, match="unknown profession"):
+        api_uses(conn, {**base, "professions": "754"})  # a racial, not a profession
+    with pytest.raises(ApiError, match="profession id"):
+        api_uses(conn, {**base, "professions": "tailoring"})
+
+
+def test_api_meta_lists_professions_with_recipes(conn):
+    profs = api_meta(conn)["professions"]
+    # The SoD tailoring recipe is incomplete, so it isn't counted.
+    assert [(p["id"], p["name"], p["recipes"]) for p in profs] == [
+        (ENCHANTING, "Enchanting", 3), (186, "Mining", 1), (TAILORING, "Tailoring", 2),
+    ]
+
+
+def test_cli_profession_names(conn):
+    from recipe_explorer.cli import _parse_professions
+
+    assert _parse_professions(conn, None) is None
+    assert _parse_professions(conn, ["tail", "Enchanting"]) == {TAILORING, ENCHANTING}
+    with pytest.raises(SystemExit, match="matches none"):
+        _parse_professions(conn, ["Alchemy"])

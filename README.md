@@ -24,6 +24,7 @@ uv run rex prices import csv my_prices.csv --realm MyRealm [--faction horde]
 uv run rex cost "Bolt of Silk Cloth" --realm MyRealm      # cheapest of AH / vendor / craft, as a tree
 uv run rex profit tailoring --realm MyRealm --max-age-days 3
 uv run rex uses "Silk Cloth" --value --realm MyRealm      # most profitable things to turn it into
+uv run rex uses "Silk Cloth" --value --realm MyRealm -p tailoring -p first   # ...with your professions
 ```
 
 ### Crafting chain graph
@@ -64,6 +65,12 @@ recipe that consumes it by **value per unit of the item**:
   overpriced listing can't top the table. Each row shows the product's listing count and age.
 * Recipes that loop back to an item already on the path (essence conversions) are skipped.
   Recipes that make no item (enchants) are listed separately, without a value.
+* **My professions** (sidebar) limits uses, and the steps they continue into, to recipes of
+  the professions you tick. Uses of other professions are hidden, and the tab says how many.
+  Nothing ticked means every profession. The other reagents are still costed the cheapest
+  way, which may be crafting them with a profession you don't have. There's no skill filter
+  because the client data has no learn ranks (see below). The setting is saved with the plan.
+  On the CLI, use `-p NAME` (name or prefix, repeatable).
 
 Expand a row to see the arithmetic for each step. *Plan this* adds the final product as
 a target, sized to use the selected node's quantity, and sets each step to craft with
@@ -123,14 +130,6 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
 | `vendor_items`, `recipe_sources` | hand-maintained, from `manual/*.csv` |
 | `v_recipes`, `v_reagent_usage` | readable views used by the CLI and Datasette |
 
-## Planned
-
-* **Profession filter for uses.** The Use tab and `rex uses --value` currently rank uses
-  across every profession, including ones you don't have. The plan is a "my professions"
-  setting (optionally with skill levels) that limits uses, and the steps they continue
-  into, to recipes you can actually craft. It belongs in `prices/uses.py` (filter in
-  `_Finder.consumers`) and is passed through `/api/uses` like the other settings.
-
 ## Things the client data does *not* tell you
 
 * **Where a recipe comes from** (trainer, vendor, drop, quest). That's server-side.
@@ -139,9 +138,11 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
   trusts it for items listed in `manual/vendor_items.csv`. The per-unit price is
   `BuyPrice / VendorStackCount`. That matches known prices like Crystal Vial at 5s, but spot-check
   others in-game.
-* **Learn rank.** `min_skill` is `SkillLineAbility.MinSkillLineRank`, which doesn't always match
-  the rank you can learn the recipe at. `skill_yellow`/`skill_grey` come straight from the
-  client. `skill_green` is the usual midpoint.
+* **Learn rank.** `min_skill` is `SkillLineAbility.MinSkillLineRank`, which is 1 for nearly every
+  recipe in the Forever client, so it can't tell you when a recipe is learned (Mooncloth: 1,
+  learned at 250). `skill_yellow`/`skill_grey` come straight from the client and look right.
+  `skill_green` is the usual midpoint. The learn rank is usually 15–25 below yellow, but that
+  isn't in the data.
 * **Leftover content.** The Forever client still contains recipes whose items have no
   `ItemSparse` row. Most look like Season of Discovery or removed content. Those recipes get
   `complete = 0` and are hidden by default (`--all` shows them). Some leftover recipes may

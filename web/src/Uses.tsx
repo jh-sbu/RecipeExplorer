@@ -245,7 +245,17 @@ export function UsesPanel({ node, plan, setPlan }: {
             Uses: value per {current.name}
             {loading && <span className="muted"> · updating…</span>}
           </h3>
-          {makesItem.length === 0 && <p className="muted small">Not used in any recipe that makes an item.</p>}
+          {current.professions && (
+            <p className="muted small">
+              Limited to your professions (set in the sidebar)
+              {current.hidden > 0 && ` · ${current.hidden} recipe(s) of other professions hidden`}
+            </p>
+          )}
+          {makesItem.length === 0 && (
+            <p className="muted small">
+              Not used in any recipe that makes an item{current.professions ? " that you can craft" : ""}.
+            </p>
+          )}
           {makesItem.length > 0 && (
             <table className="use-table">
               <tbody>

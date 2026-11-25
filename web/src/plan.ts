@@ -9,8 +9,11 @@ export const emptyPlan = (): Plan => ({
   settings: { realm: "", faction: "", maxAgeDays: null, ahCutPct: 5 },
   positions: {},
   deltaMode: "total",
-  uses: { depth: 2, minListings: 0 },
+  uses: { depth: 2, minListings: 0, professions: [] },
 });
+
+const parseProfessions = (raw: unknown): number[] =>
+  Array.isArray(raw) ? [...new Set(raw.filter((x): x is number => Number.isInteger(x)))] : [];
 
 /** Accepts anything (localStorage, an imported file) and returns a well-formed plan. */
 export function parsePlan(raw: unknown): Plan {
@@ -32,7 +35,7 @@ export function parsePlan(raw: unknown): Plan {
     settings: { ...base.settings, ...(p.settings ?? {}) },
     positions: p.positions && typeof p.positions === "object" ? p.positions : {},
     deltaMode: p.deltaMode ?? base.deltaMode,
-    uses: { ...base.uses, ...(p.uses ?? {}) },
+    uses: { ...base.uses, ...(p.uses ?? {}), professions: parseProfessions(p.uses?.professions) },
   };
 }
 

@@ -151,14 +151,32 @@ def cmd_uses(args) -> None:
         print(f"{r['spell_id']:>6}  {r['profession'][:12]:12} {r['skill_yellow'] or '-':>4}  {r['count']}x  {r['recipe']}")
 
 
+def _parse_professions(conn, refs: list[str] | None) -> set[int] | None:
+    """["tail", "Enchanting"] -> {197, 333}, matching names by prefix."""
+    if not refs:
+        return None
+    out = set()
+    for ref in refs:
+        name = ref.strip()
+        rows = conn.execute("SELECT id, name FROM professions WHERE name LIKE ? ORDER BY name", (f"{name}%",)).fetchall()
+        rows = [r for r in rows if r["name"].lower() == name.lower()] or rows
+        if len(rows) != 1:
+            found = ", ".join(r["name"] for r in rows) or "none"
+            sys.exit(f"Profession {name!r} matches {found}; give one")
+        out.add(rows[0]["id"])
+    return out
+
+
 def _print_uses_by_value(conn, item_id: int, args) -> None:
-    report = find_uses(_make_resolver(conn, args), item_id, args.depth, args.min_listings)
+    professions = _parse_professions(conn, args.profession)
+    report = find_uses(_make_resolver(conn, args), item_id, args.depth, args.min_listings, professions)
     thin = " (too few listings)" if report.thin else ""
     print(f"{report.name}, per unit: sell on AH {fmt_money(report.ah_sell)} after cut{thin}, "
           f"vendor {fmt_money(report.vendor_sell)}")
     uses = report.uses if args.all_uses else [u for u in report.uses if u.product_item_id is not None]
     if not uses:
-        print("Not used in any recipe that makes an item." if report.uses else "Not used in any recipe.")
+        mine = " you can craft" if report.professions else ""
+        print(f"Not used in any recipe{mine} that makes an item." if report.uses else f"Not used in any recipe{mine}.")
     for u in uses:
         steps = u.steps
         path = " -> ".join(s.product_name or "(no item)" for s in steps)
@@ -167,6 +185,8 @@ def _print_uses_by_value(conn, item_id: int, args) -> None:
         print(f"{fmt_money(u.value_per_unit):>14}/ea  {u.recipe} [{u.profession}, uses {_fmt_qty(u.consumes)}]: {path}")
     if hidden := len(report.uses) - len(uses):
         print(f"  ...and {hidden} recipe(s) that make no item, e.g. enchants (--all-uses to list)")
+    if report.hidden:
+        print(f"  ({report.hidden} recipe(s) of other professions not shown)")
 
 
 def _print_quote(q: Quote, depth: int = 0) -> None:
@@ -296,6 +316,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--min-listings", type=int, default=0,
                    help="with --value: ignore AH prices seen with fewer listings than this")
     s.add_argument("--all-uses", action="store_true", help="with --value: also list recipes that make no item")
+    s.add_argument("-p", "--profession", action="append", metavar="NAME",
+                   help="with --value: only recipes of this profession (name or prefix); repeatable")
     price_opts(s)
     s.set_defaults(func=cmd_uses)
 

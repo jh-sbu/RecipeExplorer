@@ -3,11 +3,12 @@
 Standard library only. Each request opens its own read-only SQLite connection, so the
 threading server needs no locking. Bound to localhost by default.
 
-  GET  /api/meta                  build info, realms with price data
+  GET  /api/meta                  build info, realms with price data, professions
   GET  /api/items?q=silk          item search (craftable items first)
   POST /api/graph                 {targets, overrides, realm, faction, max_age_days, ah_cut}
   GET  /api/uses?item_id=…        what an item can be made into, ranked by value per unit
-                                  (&realm &faction &max_age_days &ah_cut &depth &min_listings)
+                                  (&realm &faction &max_age_days &ah_cut &depth &min_listings
+                                  &professions=197,333 : only these professions' recipes)
   GET  /*                         frontend files from ui/static (built from web/)
 """
 
@@ -49,7 +50,14 @@ def api_meta(conn: sqlite3.Connection) -> dict:
             "FROM prices.price_snapshots GROUP BY realm, faction ORDER BY realm, faction"
         )
     ]
-    return {"meta": meta, "realms": realms}
+    professions = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT p.id, p.name, p.category, count(*) AS recipes FROM professions p "
+            "JOIN recipes r ON r.profession_id = p.id AND r.complete GROUP BY p.id ORDER BY p.name"
+        )
+    ]
+    return {"meta": meta, "realms": realms, "professions": professions}
 
 
 def api_items(conn: sqlite3.Connection, q: str, limit: int = 25) -> list[dict]:
@@ -126,6 +134,17 @@ def _resolver(conn: sqlite3.Connection, params: dict) -> PriceResolver:
     )
 
 
+def _professions(conn: sqlite3.Connection, value: str | None) -> set[int] | None:
+    """Parse "197,333" into {197, 333}. Empty means no filter."""
+    if not value:
+        return None
+    out = {_num(part.strip(), "profession id", cast=int) for part in value.split(",")}
+    known = {r[0] for r in conn.execute(f"SELECT id FROM professions WHERE id IN ({','.join('?' * len(out))})", list(out))}
+    if missing := sorted(set(out) - known):
+        raise ApiError(f"unknown profession id(s): {missing}")
+    return out
+
+
 def api_uses(conn: sqlite3.Connection, params: dict) -> dict:
     item_id = _num(params.get("item_id"), "item_id", cast=int)
     if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
@@ -134,7 +153,8 @@ def api_uses(conn: sqlite3.Connection, params: dict) -> dict:
     if depth > MAX_DEPTH:
         raise ApiError(f"depth must be <= {MAX_DEPTH}")
     min_listings = _num(params.get("min_listings") or 0, "min_listings", cast=int, minimum=0)
-    return find_uses(_resolver(conn, params), item_id, depth, min_listings).to_json()
+    professions = _professions(conn, params.get("professions"))
+    return find_uses(_resolver(conn, params), item_id, depth, min_listings, professions).to_json()
 
 
 # --- HTTP -------------------------------------------------------------------------

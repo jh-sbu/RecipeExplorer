@@ -122,6 +122,12 @@ button.icon { padding: 0 7px; line-height: 22px; font-size: 16px; background: no
 .details .tabs { margin: 10px 0 4px; }
 
 /* Use tab */
+.professions { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; }
+.professions li { min-height: 24px; display: flex; align-items: center; }
+.professions label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-primary); font-size: 13px; cursor: pointer; }
+.professions label > input { display: inline; width: auto; margin: 0; }
+.professions + button { margin-top: 6px; }
+
 .uses .two { margin-top: 10px; align-items: end; }
 .uses label { margin-bottom: 0; }
 .use-row { cursor: pointer; }

@@ -82,6 +82,40 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
+/** "My professions": limits the Use tab to recipes you can craft. */
+function MyProfessions({ meta, mine, onChange }: {
+  meta: Meta | null; mine: number[]; onChange: (next: number[]) => void;
+}) {
+  if (!meta) return null;
+  const sorted = [...meta.professions].sort(
+    (a, b) => Number(a.category !== "primary") - Number(b.category !== "primary") || a.name.localeCompare(b.name),
+  );
+  const toggle = (id: number, on: boolean) => onChange(on ? [...mine.filter((x) => x !== id), id] : mine.filter((x) => x !== id));
+  return (
+    <section>
+      <h2>My professions</h2>
+      <p className="muted small">
+        {mine.length
+          ? "The Use tab only shows recipes of these, at any skill level."
+          : "None picked: the Use tab shows every profession's recipes."}
+      </p>
+      <ul className="plain professions">
+        {sorted.map((p) => (
+          <li key={p.id}>
+            <label title={`${p.recipes} recipes`}>
+              <input type="checkbox" checked={mine.includes(p.id)} onChange={(e) => toggle(p.id, e.target.checked)} />
+              {p.name}
+            </label>
+          </li>
+        ))}
+      </ul>
+      {mine.length > 0 && (
+        <button onClick={() => onChange([])}>Show all professions</button>
+      )}
+    </section>
+  );
+}
+
 export function Sidebar({ plan, setPlan, meta, graph, onRelayout }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const s = graph?.summary;
@@ -192,6 +226,12 @@ export function Sidebar({ plan, setPlan, meta, graph, onRelayout }: Props) {
           </label>
         </div>
       </section>
+
+      <MyProfessions
+        meta={meta}
+        mine={plan.uses.professions}
+        onChange={(professions) => setPlan((p) => ({ ...p, uses: { ...p.uses, professions } }))}
+      />
 
       <section>
         <h2>Value added shown as</h2>

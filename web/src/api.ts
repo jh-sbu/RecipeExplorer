@@ -37,5 +37,6 @@ export const getUses = (itemId: number, plan: Plan, signal?: AbortSignal) => {
   });
   if (s.realm) q.set("realm", s.realm);
   if (s.maxAgeDays) q.set("max_age_days", String(s.maxAgeDays));
+  if (plan.uses.professions.length) q.set("professions", plan.uses.professions.join(","));
   return fetch(`api/uses?${q}`, { signal }).then(json<UseReport>);
 };

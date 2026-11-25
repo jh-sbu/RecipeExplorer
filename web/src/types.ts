@@ -77,6 +77,7 @@ export interface ItemHit {
 export interface Meta {
   meta: Record<string, string>;
   realms: { realm: string; faction: string; items: number; newest: string }[];
+  professions: { id: number; name: string; category: "primary" | "secondary"; recipes: number }[];
 }
 
 export interface Override {
@@ -133,11 +134,14 @@ export interface UseReport {
   vendor_sell: number | null;
   best_sale: number | null;
   uses: Use[];
+  professions: number[] | null;
+  hidden: number; // direct uses left out by the profession filter
 }
 
 export interface UseSettings {
   depth: number;
   minListings: number;
+  professions: number[]; // profession ids; empty = every profession
 }
 
 export interface Plan {
