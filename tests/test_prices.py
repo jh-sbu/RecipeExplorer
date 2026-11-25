@@ -1,7 +1,16 @@
 from datetime import UTC, datetime, timedelta
 
 from conftest import (
-    BOLT, BOLT_SPELL, COPPER_BAR, GREATER_ESS, LESSER_ESS, LINEN, SHIRT, SHIRT_SPELL, SMELT, THREAD,
+    BOLT,
+    BOLT_SPELL,
+    COPPER_BAR,
+    GREATER_ESS,
+    LESSER_ESS,
+    LINEN,
+    SHIRT,
+    SHIRT_SPELL,
+    SMELT,
+    THREAD,
 )
 
 from recipe_explorer.prices import PriceResolver, PriceSnapshot, store_snapshots

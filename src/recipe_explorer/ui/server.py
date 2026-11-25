@@ -216,9 +216,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "body too large"})
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
-            if not isinstance(body, dict):
-                raise ValueError
         except ValueError:
+            body = None
+        if not isinstance(body, dict):
             return self._json(HTTPStatus.BAD_REQUEST, {"error": "body must be a JSON object"})
         self._api(lambda c: api_graph(c, body))
 

@@ -2,8 +2,18 @@ import sqlite3
 
 import pytest
 from conftest import (
-    BOLT, COPPER_BAR, ENCHANT, PATTERN_SHIRT, RACIAL_SPELL, SHIRT, SHIRT_SPELL, SMELT, SOD_ITEM, SOD_SPELL,
-    THREAD, write_raw,
+    BOLT,
+    COPPER_BAR,
+    ENCHANT,
+    PATTERN_SHIRT,
+    RACIAL_SPELL,
+    SHIRT,
+    SHIRT_SPELL,
+    SMELT,
+    SOD_ITEM,
+    SOD_SPELL,
+    THREAD,
+    write_raw,
 )
 
 from recipe_explorer.ingest.normalize import SchemaError, build_gamedata

@@ -1,5 +1,6 @@
 import json
 import threading
+import urllib.error
 import urllib.request
 
 import pytest
@@ -138,6 +139,15 @@ def test_http_server_roundtrip(paths, tmp_path, prices_conn):
         )
         graph = json.load(urllib.request.urlopen(req))
         assert graph["summary"]["raw_cost"] == 200
+        for bad in (b"{not json", b"[1, 2]"):
+            req = urllib.request.Request(f"{base}/api/graph", method="POST", data=bad)
+            with pytest.raises(urllib.error.HTTPError) as err:
+                urllib.request.urlopen(req)
+            assert err.value.code == 400
+            assert json.load(err.value) == {"error": "body must be a JSON object"}
+        # An empty body is an empty object: no targets, an empty graph.
+        empty = json.load(urllib.request.urlopen(urllib.request.Request(f"{base}/api/graph", method="POST", data=b"")))
+        assert empty["nodes"] == []
         assert b"<title>t</title>" in urllib.request.urlopen(f"{base}/some/client/route").read()
         assert b"<title>t</title>" in urllib.request.urlopen(f"{base}/../../etc/passwd").read()
     finally:
