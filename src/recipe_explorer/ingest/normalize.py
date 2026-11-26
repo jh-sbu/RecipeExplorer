@@ -32,7 +32,7 @@ REQUIRED_COLUMNS: dict[str, set[str]] = {
     "Item": {"ID", "ClassID", "SubclassID", "IconFileDataID"},
     "ItemSparse": {
         "ID", "Display_lang", "OverallQualityID", "ItemLevel", "RequiredLevel", "Stackable",
-        "Bonding", "BuyPrice", "SellPrice", "VendorStackCount",
+        "Bonding", "BuyPrice", "SellPrice", "VendorStackCount", "RequiredSkillRank",
     },
     "ItemEffect": {"ID", "TriggerType", "SpellID"},
     "ItemXItemEffect": {"ItemEffectID", "ItemID"},
@@ -42,6 +42,7 @@ SKILL_CATEGORY = {"11": "primary", "9": "secondary"}
 SPELL_EFFECT_CREATE_ITEM = "24"
 ITEM_EFFECT_TRIGGER_LEARN = "6"
 ITEM_CLASS_RECIPE = "9"
+ACQUIRE_WITH_SKILL_LINE = 1
 
 
 class SchemaError(RuntimeError):
@@ -161,8 +162,11 @@ def _populate(conn: sqlite3.Connection, raw_dir: Path, manual_dir: Path) -> dict
     # --- items ----------------------------------------------------------------
     item_base = {r["ID"]: r for r in read_table(raw_dir, "Item")}
     item_rows = {}
+    required_rank: dict[str, int] = {}  # recipe items: the skill needed to learn from them
     for r in read_table(raw_dir, "ItemSparse"):
         base = item_base.get(r["ID"], {})
+        if rank := _int(r["RequiredSkillRank"]):
+            required_rank[r["ID"]] = rank
         item_rows[r["ID"]] = (
             int(r["ID"]),
             r["Display_lang"],
@@ -215,6 +219,22 @@ def _populate(conn: sqlite3.Connection, raw_dir: Path, manual_dir: Path) -> dict
             teaches.add((int(r["ItemID"]), int(spell)))
     conn.executemany("INSERT INTO recipe_teaches(item_id, spell_id) VALUES (?, ?)", sorted(teaches))
 
+    # Learn rank: the client only has it for recipes taught by an item, as the item's
+    # RequiredSkillRank. Its RequiredSkill isn't checked: First Aid manuals point at a
+    # different skill line (2942) but carry correct ranks. If several items teach a recipe,
+    # the lowest rank wins. Recipes learned with the profession itself (AcquireMethod 1)
+    # get 1. Trainer-taught recipes stay NULL.
+    learn_rank: dict[int, int] = {}
+    for item, spell in teaches:
+        if rank := required_rank.get(str(item)):
+            learn_rank[spell] = min(rank, learn_rank.get(spell, rank))
+    for rec in recipes.values():
+        if rec["acquire_method"] == ACQUIRE_WITH_SKILL_LINE:
+            learn_rank.setdefault(rec["spell_id"], 1)
+    conn.executemany(
+        "UPDATE recipes SET learn_rank = ? WHERE spell_id = ?", [(r, s) for s, r in sorted(learn_rank.items())]
+    )
+
     conn.execute("""
         UPDATE recipes SET complete = 0
          WHERE product_item_id IN (SELECT id FROM items WHERE NOT in_client)
@@ -232,6 +252,7 @@ def _populate(conn: sqlite3.Connection, raw_dir: Path, manual_dir: Path) -> dict
         "incomplete": incomplete,
         "recipe_reagents": sum(len(reagents.get(s, [])) for s in recipes),
         "recipe_teaches": len(teaches),
+        "learn_rank": len(learn_rank),
         **manual,
     }
 

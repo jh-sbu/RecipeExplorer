@@ -49,12 +49,24 @@ function Liquidity({ market, listings, observedAt, thin }: {
 }
 
 /** Per-cast arithmetic for one step of a use. */
+/** The skill needed to learn a recipe; "~" when estimated from its yellow level (trainer recipes). */
+function Learn({ u }: { u: Use }) {
+  if (u.learn_rank == null) return null;
+  return u.learn_rank_estimated ? (
+    <span title="Trainer recipe: the game data has no learn rank, so this is the skill where it turns yellow">
+      ~{u.learn_rank}
+    </span>
+  ) : (
+    <span title="Skill needed to learn it">{u.learn_rank}</span>
+  );
+}
+
 function StepBreakdown({ s, input }: { s: Use; input: string }) {
   const out = s.product_value == null ? null : s.product_value * s.product_count;
   return (
     <div className="step">
       <div>
-        <strong>{s.recipe}</strong> <span className="muted">({s.profession}) · per cast</span>
+        <strong>{s.recipe}</strong> <span className="muted">({s.profession} <Learn u={s} />) · per cast</span>
       </div>
       <table>
         <tbody>
@@ -113,7 +125,7 @@ function UseRow({ u, report, node, open, onToggle, onPlan }: {
             </Fragment>
           ))}
           <div className="muted small">
-            {u.profession} · uses {qty(u.consumes)}
+            {u.profession} <Learn u={u} /> · uses {qty(u.consumes)}
             {last.sale === "market" || last.sale === "vendor" ? ` · then ${SALE_LABEL[last.sale]}` : ""}
             {last.product_thin && <span className="thin"> · thin market</span>}
           </div>
@@ -247,8 +259,9 @@ export function UsesPanel({ node, plan, setPlan }: {
           </h3>
           {current.professions && (
             <p className="muted small">
-              Limited to your professions (set in the sidebar)
+              Limited to your professions{current.skills ? " and skill" : ""} (set in the sidebar)
               {current.hidden > 0 && ` · ${current.hidden} recipe(s) of other professions hidden`}
+              {current.hidden_skill > 0 && ` · ${current.hidden_skill} above your skill hidden`}
             </p>
           )}
           {makesItem.length === 0 && (
@@ -275,7 +288,7 @@ export function UsesPanel({ node, plan, setPlan }: {
               <ul className="plain small">
                 {noItem.map((u) => (
                   <li key={u.spell_id}>
-                    {u.recipe} <span className="muted">· {u.profession} · uses {qty(u.consumes)}</span>
+                    {u.recipe} <span className="muted">· {u.profession} <Learn u={u} /> · uses {qty(u.consumes)}</span>
                   </li>
                 ))}
               </ul>

@@ -13,12 +13,12 @@ from recipe_explorer.ingest.normalize import REQUIRED_COLUMNS, build_gamedata
 # Item IDs
 COPPER_ORE, COPPER_BAR = 2770, 2840
 LINEN, BOLT, THREAD, SHIRT = 2589, 2996, 2320, 2577
-PATTERN_SHIRT = 7000
+PATTERN_SHIRT, PATTERN_SHIRT_REPRINT, MANUAL_BOLT = 7000, 7001, 7002
 LESSER_ESS, GREATER_ESS = 10938, 10939
 SOD_ITEM = 222222  # referenced by a recipe but absent from ItemSparse
 
 # Spell IDs
-SMELT, BOLT_SPELL, SHIRT_SPELL = 2657, 2963, 3915
+SMELT, BOLT_SPELL, SHIRT_SPELL = 2657, 2963, 3915  # smelting comes with Mining (AcquireMethod 1)
 ESS_UP, ESS_DOWN = 13362, 13361
 ENCHANT = 7418
 SOD_SPELL = 446226
@@ -33,6 +33,8 @@ ITEMS = {
     THREAD: ("Coarse Thread", 1, 50, 5, 7),  # 10c each from a vendor
     SHIRT: ("Linen Shirt", 1, 300, 1, 4),
     PATTERN_SHIRT: ("Pattern: Linen Shirt", 1, 400, 1, 9),
+    PATTERN_SHIRT_REPRINT: ("Pattern: Linen Shirt", 1, 400, 1, 9),
+    MANUAL_BOLT: ("Manual: Bolt of Linen Cloth", 1, 400, 1, 9),
     LESSER_ESS: ("Lesser Magic Essence", 2, 0, 1, 7),
     GREATER_ESS: ("Greater Magic Essence", 2, 0, 1, 7),
 }
@@ -59,6 +61,9 @@ ABILITIES = [
     (8, "754", RACIAL_SPELL, 0, 0, 0),
     (9, "197", SHIRT_SPELL, 99, 99, 99),  # duplicate row: first by ID wins
 ]
+
+# Recipe items' RequiredSkillRank; items not listed get 0. The bolt manual teaches with rank 0.
+REQUIRED_RANK = {PATTERN_SHIRT: 45, PATTERN_SHIRT_REPRINT: 55}
 
 CREATES = {  # spell: (item, count)
     SMELT: (COPPER_BAR, 1),
@@ -96,7 +101,7 @@ def write_raw(raw: Path) -> None:
     ])
     _write(raw, "SkillLineAbility", [
         {"ID": i, "SkillLine": sl, "Spell": sp, "MinSkillLineRank": mn, "TrivialSkillLineRankLow": y,
-         "TrivialSkillLineRankHigh": g, "AcquireMethod": 0, "NumSkillUps": 1}
+         "TrivialSkillLineRankHigh": g, "AcquireMethod": 1 if sp == SMELT else 0, "NumSkillUps": 1}
         for i, sl, sp, mn, y, g in ABILITIES
     ])
     names = {SMELT: "Smelt Copper", BOLT_SPELL: "Bolt of Linen Cloth", SHIRT_SPELL: "Linen Shirt",
@@ -118,11 +123,19 @@ def write_raw(raw: Path) -> None:
     _write(raw, "Item", [{"ID": i, "ClassID": v[4], "SubclassID": 0} for i, v in ITEMS.items()])
     _write(raw, "ItemSparse", [
         {"ID": i, "Display_lang": n, "OverallQualityID": q, "BuyPrice": bp, "VendorStackCount": vs,
-         "SellPrice": bp // 4, "Stackable": 20}
+         "SellPrice": bp // 4, "Stackable": 20, "RequiredSkillRank": REQUIRED_RANK.get(i, 0)}
         for i, (n, q, bp, vs, _) in ITEMS.items()
     ])
-    _write(raw, "ItemEffect", [{"ID": 500, "TriggerType": 6, "SpellID": SHIRT_SPELL}])
-    _write(raw, "ItemXItemEffect", [{"ItemEffectID": 500, "ItemID": PATTERN_SHIRT}])
+    _write(raw, "ItemEffect", [
+        {"ID": 500, "TriggerType": 6, "SpellID": SHIRT_SPELL},
+        {"ID": 501, "TriggerType": 6, "SpellID": SHIRT_SPELL},
+        {"ID": 502, "TriggerType": 6, "SpellID": BOLT_SPELL},
+    ])
+    _write(raw, "ItemXItemEffect", [
+        {"ItemEffectID": 500, "ItemID": PATTERN_SHIRT},
+        {"ItemEffectID": 501, "ItemID": PATTERN_SHIRT_REPRINT},
+        {"ItemEffectID": 502, "ItemID": MANUAL_BOLT},
+    ])
 
 
 @pytest.fixture

@@ -124,6 +124,28 @@ def test_professions_filter_applies_to_later_steps(paths, conn, prices_conn):
     assert (u.sale, u.value_per_unit) == ("use", 235)
 
 
+def test_skill_filter_uses_learn_rank_or_yellow(conn, prices_conn):
+    # Bolt: no learn rank (its manual has rank 0), yellow 25. Shirt: learn rank 45.
+    add(prices_conn, LINEN, 50)
+    add(prices_conn, BOLT, 130)
+    add(prices_conn, SHIRT, 1000)
+    resolver = PriceResolver(conn, realm=REALM)
+    r = find_uses(resolver, LINEN, professions={TAILORING: 45})
+    [u] = r.uses
+    assert (u.sale, u.value_per_unit, r.skills, r.hidden_skill) == ("use", 235, {TAILORING: 45}, 0)
+    assert (u.learn_rank, u.learn_rank_estimated) == (25, True)
+    assert (u.then.learn_rank, u.then.learn_rank_estimated) == (45, False)
+    # Below the shirt's learn rank, the bolt is sold instead.
+    [u] = find_uses(resolver, LINEN, professions={TAILORING: 44}).uses
+    assert (u.sale, u.value_per_unit, u.then) == ("market", 62, None)
+    # Below the bolt's yellow, linen has no use left, and the count says why.
+    r = find_uses(resolver, LINEN, professions={TAILORING: 24, ENCHANTING: None})
+    assert (r.uses, r.hidden, r.hidden_skill, r.skills) == ([], 0, 1, {TAILORING: 24})
+    # No skill given means any skill.
+    r = find_uses(resolver, LINEN, professions={TAILORING: None})
+    assert (r.uses[0].value_per_unit, r.skills) == (235, None)
+
+
 def test_api_uses_professions(conn, prices_conn):
     add(prices_conn, LINEN, 50)
     add(prices_conn, BOLT, 130)
@@ -138,6 +160,10 @@ def test_api_uses_professions(conn, prices_conn):
         api_uses(conn, {**base, "professions": "754"})  # a racial, not a profession
     with pytest.raises(ApiError, match="profession id"):
         api_uses(conn, {**base, "professions": "tailoring"})
+    out = json.loads(json.dumps(api_uses(conn, {**base, "professions": f"{TAILORING}:20,{ENCHANTING}"})))
+    assert (out["uses"], out["hidden_skill"], out["skills"]) == ([], 1, {str(TAILORING): 20})
+    with pytest.raises(ApiError, match="skill"):
+        api_uses(conn, {**base, "professions": f"{TAILORING}:0"})
 
 
 def test_api_meta_lists_professions_with_recipes(conn):
@@ -152,6 +178,9 @@ def test_cli_profession_names(conn):
     from recipe_explorer.cli import _parse_professions
 
     assert _parse_professions(conn, None) is None
-    assert _parse_professions(conn, ["tail", "Enchanting"]) == {TAILORING, ENCHANTING}
+    assert _parse_professions(conn, ["tail", "Enchanting"]) == {TAILORING: None, ENCHANTING: None}
+    assert _parse_professions(conn, ["tail:150"]) == {TAILORING: 150}
+    with pytest.raises(SystemExit, match="positive whole number"):
+        _parse_professions(conn, ["tail:abc"])
     with pytest.raises(SystemExit, match="matches none"):
         _parse_professions(conn, ["Alchemy"])

@@ -105,6 +105,8 @@ export interface Use {
   product_name: string | null;
   product_quality: number | null;
   product_count: number;
+  learn_rank: number | null; // skill needed to learn it
+  learn_rank_estimated: boolean; // trainer recipe: its yellow level stands in
   reagents: UseReagent[];
   other_cost: number | null;
   product_market: number | null;
@@ -135,13 +137,16 @@ export interface UseReport {
   best_sale: number | null;
   uses: Use[];
   professions: number[] | null;
+  skills: Record<string, number> | null; // your skill, by profession id, where set
   hidden: number; // direct uses left out by the profession filter
+  hidden_skill: number; // direct uses of your professions left out: above your skill
 }
 
 export interface UseSettings {
   depth: number;
   minListings: number;
   professions: number[]; // profession ids; empty = every profession
+  skills: Record<string, number>; // your skill, by profession id; missing = any skill
 }
 
 export interface Plan {

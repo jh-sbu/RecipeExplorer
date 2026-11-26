@@ -117,7 +117,7 @@ def test_api_graph_validation(conn):
 
 def test_api_items_puts_craftable_first(conn):
     rows = api_items(conn, "linen")
-    assert [r["craftable"] for r in rows] == [1, 1, 0, 0]  # shirt, bolt, then cloth and pattern
+    assert [r["craftable"] for r in rows] == [1, 1, 0, 0, 0, 0]  # shirt, bolt, then cloth and 3 recipe items
     assert rows[0]["name"] == "Linen Shirt"  # starts with the query, then shorter names first
 
 

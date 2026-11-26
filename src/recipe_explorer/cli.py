@@ -122,14 +122,16 @@ def cmd_recipes(args) -> None:
         sql += " AND (name LIKE ? OR product LIKE ?)"
         params += [f"%{args.search}%"] * 2
     if args.skill is not None:
-        # Recipes that still give skill-ups (not grey) at the given skill level.
-        sql += " AND coalesce(min_skill, 0) <= ? AND (skill_grey IS NULL OR skill_grey > ?)"
+        # Recipes you can learn and that still give skill-ups (not grey) at this skill. Trainer
+        # recipes have no learn rank in the data: their yellow level stands in for it.
+        sql += " AND coalesce(learn_rank, skill_yellow, 0) <= ? AND (skill_grey IS NULL OR skill_grey > ?)"
         params += [args.skill, args.skill]
     sql += " ORDER BY profession, skill_yellow, name"
     for r in conn.execute(sql, params):
         skill = f"{r['skill_yellow'] or '-'}/{r['skill_green'] or '-'}/{r['skill_grey'] or '-'}"
         product = f" -> {_fmt_qty(r['product_count'])}x {r['product']}" if r["product"] else ""
-        print(f"{r['spell_id']:>6}  {r['profession'][:12]:12} {skill:>11}  {r['name']}{product}")
+        learn = r["learn_rank"] or "-"
+        print(f"{r['spell_id']:>6}  {r['profession'][:12]:12} {learn:>4} {skill:>11}  {r['name']}{product}")
         if args.verbose:
             print(f"{'':8}reagents: {r['reagents'] or '-'}")
             if r["taught_by"]:
@@ -151,20 +153,28 @@ def cmd_uses(args) -> None:
         print(f"{r['spell_id']:>6}  {r['profession'][:12]:12} {r['skill_yellow'] or '-':>4}  {r['count']}x  {r['recipe']}")
 
 
-def _parse_professions(conn, refs: list[str] | None) -> set[int] | None:
-    """["tail", "Enchanting"] -> {197, 333}, matching names by prefix."""
+def _parse_professions(conn, refs: list[str] | None) -> dict[int, int | None] | None:
+    """["tail:150", "Enchanting"] -> {197: 150, 333: None}, matching names by prefix."""
     if not refs:
         return None
-    out = set()
+    out: dict[int, int | None] = {}
     for ref in refs:
-        name = ref.strip()
+        name, _, skill = ref.strip().partition(":")
+        name = name.strip()
+        if skill and not (skill.strip().isdigit() and int(skill) > 0):
+            sys.exit(f"Skill in {ref!r} must be a positive whole number")
         rows = conn.execute("SELECT id, name FROM professions WHERE name LIKE ? ORDER BY name", (f"{name}%",)).fetchall()
         rows = [r for r in rows if r["name"].lower() == name.lower()] or rows
         if len(rows) != 1:
             found = ", ".join(r["name"] for r in rows) or "none"
             sys.exit(f"Profession {name!r} matches {found}; give one")
-        out.add(rows[0]["id"])
+        out[rows[0]["id"]] = int(skill) if skill else None
     return out
+
+
+def _fmt_learn(u) -> str:
+    """Learn rank, with ~ when it's estimated from the yellow level."""
+    return "-" if u.learn_rank is None else f"{'~' if u.learn_rank_estimated else ''}{u.learn_rank}"
 
 
 def _print_uses_by_value(conn, item_id: int, args) -> None:
@@ -182,11 +192,14 @@ def _print_uses_by_value(conn, item_id: int, args) -> None:
         path = " -> ".join(s.product_name or "(no item)" for s in steps)
         if steps[-1].sale in ("market", "vendor"):
             path += f" ({'AH' if steps[-1].sale == 'market' else 'vendor'})"
-        print(f"{fmt_money(u.value_per_unit):>14}/ea  {u.recipe} [{u.profession}, uses {_fmt_qty(u.consumes)}]: {path}")
+        print(f"{fmt_money(u.value_per_unit):>14}/ea  {u.recipe} [{u.profession} {_fmt_learn(u)}, "
+              f"uses {_fmt_qty(u.consumes)}]: {path}")
     if hidden := len(report.uses) - len(uses):
         print(f"  ...and {hidden} recipe(s) that make no item, e.g. enchants (--all-uses to list)")
     if report.hidden:
         print(f"  ({report.hidden} recipe(s) of other professions not shown)")
+    if report.hidden_skill:
+        print(f"  ({report.hidden_skill} recipe(s) above your skill not shown)")
 
 
 def _print_quote(q: Quote, depth: int = 0) -> None:
@@ -297,7 +310,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("recipes", help="list/search recipes")
     s.add_argument("-p", "--profession")
     s.add_argument("-s", "--search")
-    s.add_argument("--skill", type=int, help="only recipes still giving skill-ups at this level")
+    s.add_argument("--skill", type=int,
+                   help="only recipes you can learn and that still give skill-ups at this level "
+                        "(trainer recipes count from yellow: the data has no learn rank for them)")
     s.add_argument("-v", "--verbose", action="store_true")
     s.add_argument("--all", action="store_true", help=ALL_HELP)
     s.set_defaults(func=cmd_recipes)
@@ -317,7 +332,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="with --value: ignore AH prices seen with fewer listings than this")
     s.add_argument("--all-uses", action="store_true", help="with --value: also list recipes that make no item")
     s.add_argument("-p", "--profession", action="append", metavar="NAME",
-                   help="with --value: only recipes of this profession (name or prefix); repeatable")
+                   help="with --value: only recipes of this profession (name or prefix), optionally "
+                        "learnable at a skill: tailoring:150; repeatable")
     price_opts(s)
     s.set_defaults(func=cmd_uses)
 

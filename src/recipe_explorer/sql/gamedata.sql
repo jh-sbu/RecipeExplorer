@@ -34,7 +34,11 @@ CREATE TABLE recipes (
     spell_id         INTEGER PRIMARY KEY,
     name             TEXT NOT NULL,
     profession_id    INTEGER NOT NULL REFERENCES professions(id),
-    min_skill        INTEGER,              -- SkillLineAbility.MinSkillLineRank (not always the learn rank)
+    min_skill        INTEGER,              -- SkillLineAbility.MinSkillLineRank (1 for nearly every recipe: not the learn rank)
+    -- Skill needed to learn the recipe: RequiredSkillRank of the item that teaches it
+    -- (lowest, if several do), or 1 if it comes with the profession (acquire_method 1).
+    -- NULL for trainer-taught recipes: the client doesn't hold those.
+    learn_rank       INTEGER,
     skill_yellow     INTEGER,              -- TrivialSkillLineRankLow
     skill_grey       INTEGER,              -- TrivialSkillLineRankHigh
     skill_green      INTEGER,              -- conventional midpoint of yellow and grey
@@ -83,6 +87,7 @@ SELECT r.spell_id,
        r.name,
        p.name          AS profession,
        r.min_skill,
+       r.learn_rank,
        r.skill_yellow,
        r.skill_green,
        r.skill_grey,

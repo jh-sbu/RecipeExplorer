@@ -11,7 +11,7 @@ uv sync --extra ui          # drop --extra ui if you don't want Datasette
 uv run rex build            # fetch the latest Forever build + build data/gamedata.sqlite
 uv run rex info             # build number, recipe counts per profession
 
-uv run rex recipes -p tailoring --skill 150      # what still gives skill-ups at 150
+uv run rex recipes -p tailoring --skill 150      # learnable and still giving skill-ups at 150
 uv run rex recipes -s "silk" -v                  # search, with reagents + recipe items
 uv run rex uses "Bolt of Silk Cloth"             # what consumes this reagent
 uv run rex serve --open                          # browse everything in Datasette
@@ -24,7 +24,7 @@ uv run rex prices import csv my_prices.csv --realm MyRealm [--faction horde]
 uv run rex cost "Bolt of Silk Cloth" --realm MyRealm      # cheapest of AH / vendor / craft, as a tree
 uv run rex profit tailoring --realm MyRealm --max-age-days 3
 uv run rex uses "Silk Cloth" --value --realm MyRealm      # most profitable things to turn it into
-uv run rex uses "Silk Cloth" --value --realm MyRealm -p tailoring -p first   # ...with your professions
+uv run rex uses "Silk Cloth" --value --realm MyRealm -p tailoring:150 -p first   # ...with your professions
 ```
 
 ### Crafting chain graph
@@ -68,9 +68,12 @@ recipe that consumes it by **value per unit of the item**:
 * **My professions** (sidebar) limits uses, and the steps they continue into, to recipes of
   the professions you tick. Uses of other professions are hidden, and the tab says how many.
   Nothing ticked means every profession. The other reagents are still costed the cheapest
-  way, which may be crafting them with a profession you don't have. There's no skill filter
-  because the client data has no learn ranks (see below). The setting is saved with the plan.
-  On the CLI, use `-p NAME` (name or prefix, repeatable).
+  way, which may be crafting them with a profession you don't have. Give a **skill** for a
+  ticked profession to also hide its recipes you can't learn yet. The tab counts those too,
+  and each use shows the skill it needs. Trainer recipes have no learn rank in the data (see
+  below), so they count from their yellow level, shown as `~270`. You can usually learn them
+  10–25 points sooner. The setting is saved with the plan. On the CLI, use `-p NAME` or
+  `-p NAME:SKILL` (name or prefix, repeatable).
 
 Expand a row to see the arithmetic for each step. *Plan this* adds the final product as
 a target, sized to use the selected node's quantity, and sets each step to craft with
@@ -139,10 +142,13 @@ under `data/raw/<build>/`, so you can rebuild or diff any old build offline.
   `BuyPrice / VendorStackCount`. That matches known prices like Crystal Vial at 5s, but spot-check
   others in-game.
 * **Learn rank.** `min_skill` is `SkillLineAbility.MinSkillLineRank`, which is 1 for nearly every
-  recipe in the Forever client, so it can't tell you when a recipe is learned (Mooncloth: 1,
-  learned at 250). `skill_yellow`/`skill_grey` come straight from the client and look right.
-  `skill_green` is the usual midpoint. The learn rank is usually 15–25 below yellow, but that
-  isn't in the data.
+  recipe in the Forever client, so it can't tell you when a recipe is learned. `learn_rank`
+  comes from the item that teaches the recipe (its `RequiredSkillRank`; the lowest if several
+  items teach it), e.g. Mooncloth at 230 from *Pattern: Mooncloth*. Recipes that come with
+  the profession (`acquire_method` 1) get 1. That covers about three quarters of recipes.
+  Trainer-taught recipes have no learn rank, because trainer lists are server data. The skill
+  filters use their yellow level instead. `skill_yellow`/`skill_grey` come straight from the client and look
+  right. `skill_green` is the usual midpoint.
 * **Leftover content.** The Forever client still contains recipes whose items have no
   `ItemSparse` row. Most look like Season of Discovery or removed content. Those recipes get
   `complete = 0` and are hidden by default (`--all` shows them). Some leftover recipes may

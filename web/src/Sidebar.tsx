@@ -82,21 +82,34 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
-/** "My professions": limits the Use tab to recipes you can craft. */
-function MyProfessions({ meta, mine, onChange }: {
-  meta: Meta | null; mine: number[]; onChange: (next: number[]) => void;
+/** "My professions": limits the Use tab to recipes you can craft, optionally at your skill. */
+function MyProfessions({ meta, mine, skills, onChange }: {
+  meta: Meta | null;
+  mine: number[];
+  skills: Record<string, number>;
+  onChange: (next: { professions: number[]; skills: Record<string, number> }) => void;
 }) {
   if (!meta) return null;
   const sorted = [...meta.professions].sort(
     (a, b) => Number(a.category !== "primary") - Number(b.category !== "primary") || a.name.localeCompare(b.name),
   );
-  const toggle = (id: number, on: boolean) => onChange(on ? [...mine.filter((x) => x !== id), id] : mine.filter((x) => x !== id));
+  // Unticking a profession forgets its skill.
+  const toggle = (id: number, on: boolean) => {
+    const { [id]: _, ...rest } = skills;
+    onChange(on ? { professions: [...mine.filter((x) => x !== id), id], skills } : { professions: mine.filter((x) => x !== id), skills: rest });
+  };
+  const setSkill = (id: number, raw: string) => {
+    const { [id]: _, ...rest } = skills;
+    const n = Math.floor(Number(raw));
+    onChange({ professions: mine, skills: raw && n > 0 ? { ...rest, [id]: n } : rest });
+  };
+  const ticked = sorted.filter((p) => mine.includes(p.id));
   return (
     <section>
       <h2>My professions</h2>
       <p className="muted small">
         {mine.length
-          ? "The Use tab only shows recipes of these, at any skill level."
+          ? "The Use tab only shows recipes of these. With a skill, only recipes you can learn at it."
           : "None picked: the Use tab shows every profession's recipes."}
       </p>
       <ul className="plain professions">
@@ -109,8 +122,30 @@ function MyProfessions({ meta, mine, onChange }: {
           </li>
         ))}
       </ul>
+      {ticked.length > 0 && (
+        <div className="skills">
+          <h3>Skill (blank = any)</h3>
+          {ticked.map((p) => (
+            <label key={p.id}>
+              {p.name}
+              <input
+                type="number"
+                min={1}
+                max={450}
+                placeholder="any"
+                value={skills[p.id] ?? ""}
+                onChange={(e) => setSkill(p.id, e.target.value)}
+              />
+            </label>
+          ))}
+          <p className="muted small">
+            Trainer recipes have no learn rank in the game data, so they count from the skill where
+            they turn yellow. You may be able to learn them 10–25 points sooner.
+          </p>
+        </div>
+      )}
       {mine.length > 0 && (
-        <button onClick={() => onChange([])}>Show all professions</button>
+        <button onClick={() => onChange({ professions: [], skills: {} })}>Show all professions</button>
       )}
     </section>
   );
@@ -230,7 +265,8 @@ export function Sidebar({ plan, setPlan, meta, graph, onRelayout }: Props) {
       <MyProfessions
         meta={meta}
         mine={plan.uses.professions}
-        onChange={(professions) => setPlan((p) => ({ ...p, uses: { ...p.uses, professions } }))}
+        skills={plan.uses.skills}
+        onChange={(next) => setPlan((p) => ({ ...p, uses: { ...p.uses, ...next } }))}
       />
 
       <section>

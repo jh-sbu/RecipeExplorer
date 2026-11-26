@@ -126,7 +126,11 @@ button.icon { padding: 0 7px; line-height: 22px; font-size: 16px; background: no
 .professions li { min-height: 24px; display: flex; align-items: center; }
 .professions label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-primary); font-size: 13px; cursor: pointer; }
 .professions label > input { display: inline; width: auto; margin: 0; }
-.professions + button { margin-top: 6px; }
+.professions + button, .skills + button { margin-top: 6px; }
+.skills h3 { margin-top: 10px; }
+.skills label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; color: var(--text-primary); font-size: 13px; }
+.skills label > input { display: inline; width: 64px; margin: 0; }
+.skills p { margin: 6px 0 0; }
 
 .uses .two { margin-top: 10px; align-items: end; }
 .uses label { margin-bottom: 0; }

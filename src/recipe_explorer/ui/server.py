@@ -8,7 +8,8 @@ threading server needs no locking. Bound to localhost by default.
   POST /api/graph                 {targets, overrides, realm, faction, max_age_days, ah_cut}
   GET  /api/uses?item_id=…        what an item can be made into, ranked by value per unit
                                   (&realm &faction &max_age_days &ah_cut &depth &min_listings
-                                  &professions=197,333 : only these professions' recipes)
+                                  &professions=197:150,333 : only these professions' recipes,
+                                  and for 197 only those learnable at skill 150)
   GET  /*                         frontend files from ui/static (built from web/)
 """
 
@@ -134,13 +135,16 @@ def _resolver(conn: sqlite3.Connection, params: dict) -> PriceResolver:
     )
 
 
-def _professions(conn: sqlite3.Connection, value: str | None) -> set[int] | None:
-    """Parse "197,333" into {197, 333}. Empty means no filter."""
+def _professions(conn: sqlite3.Connection, value: str | None) -> dict[int, int | None] | None:
+    """Parse "197:150,333" into {197: 150, 333: None} (id, optional skill). Empty means no filter."""
     if not value:
         return None
-    out = {_num(part.strip(), "profession id", cast=int) for part in value.split(",")}
+    out: dict[int, int | None] = {}
+    for part in value.split(","):
+        pid, _, skill = part.strip().partition(":")
+        out[_num(pid, "profession id", cast=int)] = _num(skill, "skill", cast=int, minimum=1) if skill else None
     known = {r[0] for r in conn.execute(f"SELECT id FROM professions WHERE id IN ({','.join('?' * len(out))})", list(out))}
-    if missing := sorted(set(out) - known):
+    if missing := sorted(out.keys() - known):
         raise ApiError(f"unknown profession id(s): {missing}")
     return out
 

@@ -3,8 +3,10 @@ import sqlite3
 import pytest
 from conftest import (
     BOLT,
+    BOLT_SPELL,
     COPPER_BAR,
     ENCHANT,
+    ESS_UP,
     PATTERN_SHIRT,
     RACIAL_SPELL,
     SHIRT,
@@ -60,10 +62,21 @@ def test_missing_items_get_placeholders_and_flag_recipe_incomplete(conn):
 
 
 def test_recipe_teaches_and_view(conn):
-    assert tuple(conn.execute("SELECT item_id, spell_id FROM recipe_teaches").fetchone()) == (PATTERN_SHIRT, SHIRT_SPELL)
+    taught = conn.execute("SELECT spell_id FROM recipe_teaches WHERE item_id = ?", (PATTERN_SHIRT,)).fetchone()
+    assert taught[0] == SHIRT_SPELL
     v = conn.execute("SELECT * FROM v_recipes WHERE spell_id = ?", (SHIRT_SPELL,)).fetchone()
-    assert v["product"] == "Linen Shirt" and v["taught_by"] == "Pattern: Linen Shirt"
+    assert v["product"] == "Linen Shirt" and "Pattern: Linen Shirt" in v["taught_by"]
     assert "2x Bolt of Linen Cloth" in v["reagents"]
+
+
+def test_learn_rank_from_items_or_the_profession(conn):
+    rows = dict(conn.execute("SELECT spell_id, learn_rank FROM recipes").fetchall())
+    assert rows[SHIRT_SPELL] == 45  # two patterns, 45 and 55; min_skill says 40
+    assert rows[BOLT_SPELL] is None  # its only item has rank 0
+    assert rows[SMELT] == 1  # comes with the profession
+    assert rows[ESS_UP] is None  # trainer-taught: not in the client
+    v = conn.execute("SELECT learn_rank FROM v_recipes WHERE spell_id = ?", (SHIRT_SPELL,)).fetchone()
+    assert v[0] == 45
 
 
 def test_manual_data_is_validated(conn, paths, capsys):
